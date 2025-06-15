@@ -1,4 +1,6 @@
 module ConfigSet = Set.Make(String)
+open Yojson.Basic
+open Yojson.Basic.Util
 
 (* TYPEDEFS *)
 type direction = Left | Right
@@ -52,14 +54,14 @@ let create_machine name alphabet blank states initial finals =
 
   (* UTILS *)
 let print_separator () =
-  Printf.printf "********************************************************\n"
+  Printf.printf "********************\n"
 
 let print_tape tape state =
   Printf.printf "[";
-  List.iter (Printf.printf "%c") tape.left;
+  List.iter (Printf.printf "%c") (List.rev tape.left);
   Printf.printf "<%c>" tape.current;
   List.iter (Printf.printf "%c") tape.right;
-  Printf.printf "] " 
+  Printf.printf "] "
 
 let print_alphabet alphabet =
   Printf.printf "Alphabet: [ ";
@@ -78,7 +80,6 @@ let print_machine machine =
   Printf.printf "* %-52s *\n" "";
   print_separator ();
   print_alphabet machine.alphabet;
-  (* Printf.printf "Blank Symbol: %c\n" machine.blank; *)
   Printf.printf "States: [";
   List.iter (Printf.printf "%s, ") machine.states;
   Printf.printf "]\nInitial: %s\n" machine.initial;
@@ -98,32 +99,6 @@ let add_transition tbl state read to_state write action =
   let trans = { read; to_state; write; action = direction_of_string action } in
   Hashtbl.add tbl (state, read) trans
 
-
-let create_machine_example () =
-  let alphabet = ['1'; '.'; '-'; '='] in
-  let states = ["scanright"; "eraseone"; "subone"; "skip"; "HALT"] in
-  let initial = "scanright" in
-  let finals = ["HALT"] in
-  let machine = create_machine "unary_sub" alphabet '.' states initial finals in
-
-  add_transition machine.transitions "scanright" '.' "scanright" '.' "RIGHT";
-  (* add_transition machine.transitions "scanright" '.' "scanright" '.' "LEFT"; *)
-  (* add_transition machine.transitions "scanright" '1' "scanright" '1' "RIGHT"; *)
-  add_transition machine.transitions "scanright" '1' "scanright" '1' "LEFT";
-  add_transition machine.transitions "scanright" '-' "scanright" '-' "RIGHT";
-  add_transition machine.transitions "scanright" '=' "eraseone" '.' "LEFT";
-
-  add_transition machine.transitions "eraseone" '1' "subone" '=' "LEFT";
-  add_transition machine.transitions "eraseone" '-' "HALT" '.' "LEFT";
-
-  add_transition machine.transitions "subone" '1' "subone" '1' "LEFT";
-  add_transition machine.transitions "subone" '-' "skip" '-' "LEFT";
-
-  add_transition machine.transitions "skip" '.' "skip" '.' "LEFT";
-  add_transition machine.transitions "skip" '1' "scanright" '.' "RIGHT";
-
-  machine
-
 (* Turing's machine utils *)
 let update_current tape sym =
   { tape with current = sym }
@@ -133,20 +108,14 @@ let move_left tape blank =
   | [] ->
       failwith "Cannot move left from the beginning of the tape"
   | hd :: tl ->
-      { left    = tl
-      ; current = hd
-      ; right   = tape.current :: tape.right
-      }
+      { left = tl; current = hd; right = (tape.current) :: tape.right }
 
 let move_right tape blank =
   match tape.right with
-  | [] ->
+  | [] -> 
       failwith "Cannot move right from the end of the tape"
   | hd :: tl ->
-      { left    = tape.current :: tape.left
-      ; current = hd
-      ; right   = tl
-      }
+      { left = tape.current :: tape.left; current = hd; right = tl }
 
 let step config =
   let { state; tape = { current; _ }; machine } = config in
@@ -227,9 +196,103 @@ let run_detect_cycles machine input =
   in
   loop { machine; tape; state = machine.initial } ConfigSet.empty
 
-let () =
-let machine = create_machine_example () in
-let input = ".111-11=........." in
-print_machine machine;
+(* JSON parsing *)
+let symbol_of_yojson json =
+  match json |> to_string with
+  | s when String.length s = 1 -> s.[0]
+  | _ -> failwith "Expected single-character string for symbol"
 
-run_detect_cycles machine input;
+let transition_of_yojson json =
+  let read   = json |> member "read"   |> symbol_of_yojson in
+  let to_st  = json |> member "to_state" |> to_string in
+  let write  = json |> member "write"  |> symbol_of_yojson in
+  let action = json |> member "action" |> to_string |> direction_of_string in
+  { read; to_state = to_st; write; action }
+
+let build_transitions tbl state_name entries =
+  List.iter
+    (fun entry ->
+       let trans = transition_of_yojson entry in
+       Hashtbl.add tbl (state_name, trans.read) trans
+    )
+    entries
+
+let parse_machine json =
+  let name     = json |> member "name"    |> to_string in
+  let alphabet = json |> member "alphabet"|> to_list |> List.map symbol_of_yojson in
+  let blank    = json |> member "blank"   |> symbol_of_yojson in
+  let states   = json |> member "states"  |> to_list |> List.map to_string in
+  let initial  = json |> member "initial" |> to_string in
+  let finals   = json |> member "finals"  |> to_list |> List.map to_string in
+  let machine  = create_machine name alphabet blank states initial finals in
+
+  json
+  |> member "transitions"
+  |> to_assoc
+  |> List.iter (fun (state_name, json_list) ->
+       let entries = json_list |> to_list in
+       build_transitions machine.transitions state_name entries
+     );
+
+  machine
+
+(* VALIDATE *)
+let validate_machine machine =
+  if not (List.mem machine.initial machine.states) then
+    failwith (Printf.sprintf "Initial state '%s' is not in the list of states." machine.initial);
+
+  List.iter (fun final ->
+    if not (List.mem final machine.states) then
+      failwith (Printf.sprintf "Final state '%s' is not in the list of states." final)
+  ) machine.finals;
+
+  if not (List.mem machine.blank machine.alphabet) then
+    failwith (Printf.sprintf "Blank symbol '%c' is not in the machine's alphabet." machine.blank);
+
+  if not (List.mem machine.blank machine.alphabet) then
+    failwith (Printf.sprintf "Blank symbol '%c' is not in the machine's alphabet." machine.blank);
+
+  Hashtbl.iter (fun (state, symbol) { to_state; write; action = _; _ } ->
+    if not (List.mem state machine.states) then
+      failwith (Printf.sprintf "Transition from unknown state '%s'" state);
+
+    if not (List.mem symbol machine.alphabet) then
+      failwith (Printf.sprintf "Transition reads unknown symbol '%c' in state '%s'" symbol state);
+
+    if not (List.mem to_state machine.states) then
+      failwith (Printf.sprintf "Transition goes to unknown state '%s' from state '%s'" to_state state);
+
+    if not (List.mem write machine.alphabet) then
+      failwith (Printf.sprintf "Transition writes unknown symbol '%c' in state '%s'" write state)
+  ) machine.transitions
+
+
+(* MAIN *)
+let () =
+if Array.length Sys.argv <> 3 then (
+  Printf.printf "Usage: %s <json_file> <input_str>\n" Sys.argv.(0);
+  exit 1
+);
+
+let file_name = Sys.argv.(1) in
+let json_str =
+  let ic = open_in file_name in
+  let json_str = really_input_string ic (in_channel_length ic) in
+  close_in ic;
+  json_str
+in
+
+let input = Sys.argv.(2) in
+if String.length input = 0 then (
+  Printf.printf "Input string cannot be empty.\n";
+  exit 1
+);
+let json = Yojson.Basic.from_string json_str in
+let m = parse_machine json in
+validate_machine m;
+print_machine m;
+let blank_symbol = m.blank in
+let blank_string = String.make 10 blank_symbol in
+let input = input ^ blank_string in
+
+run m input;

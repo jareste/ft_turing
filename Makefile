@@ -1,7 +1,7 @@
 NAME=main
 
 all: .gitignore
-	ocamlopt -o $(NAME) -I srcs srcs/main.ml
+	ocamlfind ocamlopt -o $(NAME) -I srcs -package yojson -linkpkg srcs/main.ml
 
 .PHONY: all .gitignore
 
