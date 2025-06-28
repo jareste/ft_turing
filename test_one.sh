@@ -5,7 +5,7 @@ json_file="${2:-config/json.json}"
 input_string="${3:-1232131o0}"
 expected="${4:-your expected output here}"
 
-output=$(./main "$json_file" "$input_string" 2>&1)
+output=$(./ft_turing "$json_file" "$input_string" 2>&1)
 
 echo -e "\e[34m**********************************************"
 echo -e "$test_description"
