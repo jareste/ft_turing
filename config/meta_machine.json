@@ -10,7 +10,7 @@
 	"states": ["start", "stop", "HALT" ],
 	"initial": "scanright",
 	"finals": ["HALT"],
-	"transitions": {
+	"states": {
 		"start": [
             { "read": "[", "to_state": "start", "write": "[", "action": "RIGHT" },
             { "read": "s", "to_state": "read_input", "write": "s", "action": "RIGHT" }
@@ -115,24 +115,40 @@
         ],
         "check_s1": [
             { "read": "s", "to_state": "check_s1", "write": "s", "action": "RIGHT" },
-            { "read": "1", "to_state": "parse_transition", "write": "1", "action": "RIGHT" },
+            { "read": "1", "to_state": "check_s1", "write": "1", "action": "RIGHT" },
+            { "read": ":", "to_state": "parse_state", "write": ":", "action": "RIGHT" },
             { "read": "e", "to_state": "search_s1", "write": "e", "action": "RIGHT" },
             { "read": "m", "to_state": "search_s1", "write": "m", "action": "RIGHT" }
         ],
         "check_e1": [
             { "read": "e", "to_state": "check_e1", "write": "e", "action": "RIGHT" },
-            { "read": "1", "to_state": "parse_transition", "write": "1", "action": "RIGHT" },
+            { "read": "1", "to_state": "check_e1", "write": "1", "action": "RIGHT" },
+            { "read": ":", "to_state": "parse_state", "write": ":", "action": "RIGHT" },
             { "read": "s", "to_state": "search_e1", "write": "s", "action": "RIGHT" },
             { "read": "m", "to_state": "search_e1", "write": "m", "action": "RIGHT" }
         ],
         "check_m1": [
             { "read": "m", "to_state": "check_m1", "write": "m", "action": "RIGHT" },
-            { "read": "1", "to_state": "parse_transition", "write": "1", "action": "RIGHT" },
+            { "read": "1", "to_state": "check_m1", "write": "1", "action": "RIGHT" },
+            { "read": ":", "to_state": "parse_state", "write": ":", "action": "RIGHT" },
             { "read": "e", "to_state": "search_m1", "write": "e", "action": "RIGHT" },
             { "read": "s", "to_state": "search_m1", "write": "s", "action": "RIGHT" }
         ],
-        "parse_transition": [
-            { "read": ":", "to_state": "parse_state", "write": ":", "action": "RIGHT" }
+        "parse_state": [
+            { "read": "s", "to_state": "parse_write_remember_s", "write": "s", "action": "RIGHT" },
+            { "read": "e", "to_state": "parse_write_remember_e", "write": "e", "action": "RIGHT" },
+            { "read": "m", "to_state": "parse_write_remember_m", "write": "m", "action": "RIGHT" },
+            { "read": "H", "to_state": "parse_write_remember_H", "write": "H", "action": "RIGHT" }
+        ],
+        "parse_write_remember_s": [
+            { "read": "1", "to_state": "parse_write_remember_s1", "write": "1", "action": "RIGHT" }
+        ],
+        "parse_write_remember_e": [
+            { "read": "1", "to_state": "parse_write_remember_e1", "write": "1", "action": "RIGHT" }
+        ],
+        "parse_write_remember_m": [
+            { "read": "1", "to_state": "parse_write_remember_m1", "write": "1", "action": "RIGHT" },
+            { "read": ".", "to_state": "", "write": ".", "action": "RIGHT" }
         ],
         "stop": [
             { "read": ".", "to_state": "HALT", "write": ".", "action": "RIGHT" }
@@ -142,3 +158,4 @@
 
 
 "[s]#t,s1:s1R,s+:s1R,e1:e1R,e=:m.L,e.:m.L,m1:H.L#i,111+11=........"
+transitions: s1R, e1R, m.L, H.L
